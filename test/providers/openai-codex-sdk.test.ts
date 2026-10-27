@@ -194,6 +194,15 @@ describe('OpenAICodexSDKProvider', () => {
     await clearCache();
   });
 
+  it('accepts the downstream Codex SDK version', async () => {
+    vi.mocked(getPackageVersion).mockReturnValue('0.164.0');
+    mockRun.mockResolvedValue(createMockResponse('Compatible SDK response'));
+    const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
+    const response = await provider.callApi('test');
+    expect(response.error).toBeUndefined();
+    expect(response.output).toBe('Compatible SDK response');
+  });
+
   it.each(['0.144.0', '0.157.0', '1.0.0', 'invalid', null])(
     'rejects incompatible SDK %s before importing it',
     async (version) => {
@@ -201,8 +210,60 @@ describe('OpenAICodexSDKProvider', () => {
       const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
       const response = await provider.callApi('test');
       expect(response.error).toContain('requires @openai/codex-sdk@^0.156.1');
-      expect(response.error).toContain('npm install promptfoo @openai/codex-sdk@^0.156.1');
+      expect(response.error).toContain(
+        'npm install promptfoo "@openai/codex-sdk@^0.156.1 || 0.164.0"',
+      );
       expect(importModule).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['missing', 'incompatible', 'import failure'])(
+    'quotes the SDK installation argument for %s errors',
+    async (failure) => {
+      if (failure === 'missing') {
+        mockResolvePackageEntryPoint.mockReturnValue(null);
+      } else if (failure === 'incompatible') {
+        vi.mocked(getPackageVersion).mockReturnValue('1.0.0');
+      } else {
+        mockImportModule.mockRejectedValueOnce(new Error('SDK import failed'));
+      }
+
+      const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
+      const response = await provider.callApi('test');
+      const command = response.error?.match(/npm install[^\n]*/)?.[0];
+      expect(command).toBe('npm install promptfoo "@openai/codex-sdk@^0.156.1 || 0.164.0"');
+      // Capture shell-parsed arguments without invoking npm or installing packages.
+      if (process.platform === 'win32') {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-npm-args-'));
+        try {
+          const capture = path.join(directory, 'capture.cjs');
+          fs.writeFileSync(capture, 'console.log(JSON.stringify(process.argv.slice(2)));');
+          fs.writeFileSync(
+            path.join(directory, 'npm.cmd'),
+            `@"${process.execPath}" "${capture}" %*\r\n`,
+          );
+          const args = execFileSync('cmd.exe', ['/d', '/s', '/c', command!], {
+            cwd: directory,
+            encoding: 'utf8',
+          });
+          expect(JSON.parse(args)).toEqual([
+            'install',
+            'promptfoo',
+            '@openai/codex-sdk@^0.156.1 || 0.164.0',
+          ]);
+        } finally {
+          fs.rmSync(directory, { recursive: true, force: true });
+        }
+      } else {
+        const args = execFileSync('/bin/sh', ['-c', `npm() { printf '%s\\n' "$@"; }\n${command}`], {
+          encoding: 'utf8',
+        });
+        expect(args.trimEnd().split('\n')).toEqual([
+          'install',
+          'promptfoo',
+          '@openai/codex-sdk@^0.156.1 || 0.164.0',
+        ]);
+      }
     },
   );
 
