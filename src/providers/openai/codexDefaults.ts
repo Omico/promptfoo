@@ -3,17 +3,11 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import semverSatisfies from 'semver/functions/satisfies.js';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getPackageVersion } from '../../util/packageVersion';
 import { resolveProviderApiKey } from '../credentials';
 import { providerRegistry } from '../providerRegistry';
-import {
-  CODEX_SDK_VERSION_RANGE,
-  OpenAICodexSDKProvider,
-  resolveCodexSdkPackage,
-} from './codex-sdk';
+import { OpenAICodexSDKProvider, resolveCodexSdkPackage } from './codex-sdk';
 
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders } from '../../types/index';
@@ -88,8 +82,6 @@ type ManagedCodexDefaultProviderBundle = CodexDefaultProviderBundle & {
 const codexDefaultProvidersByCacheKey = new Map<string, ManagedCodexDefaultProviderBundle>();
 const evictedCodexDefaultProviderBundles = new Set<ManagedCodexDefaultProviderBundle>();
 
-const codexSdkAvailabilityByEntryPoint = new Map<string, boolean>();
-
 function getCodexEnvString(env: EnvOverrides | undefined, key: string): string | undefined {
   return env?.[key] ?? getEnvString(key);
 }
@@ -135,23 +127,7 @@ function hasCodexAuthFile(env?: EnvOverrides): boolean {
 }
 
 function canLoadCodexSdkPackage(): boolean {
-  const entryPoint = resolveCodexSdkPackage();
-  if (!entryPoint) {
-    return false;
-  }
-  const cached = codexSdkAvailabilityByEntryPoint.get(entryPoint);
-  if (cached !== undefined) {
-    return cached;
-  }
-  let compatible = false;
-  try {
-    const version = getPackageVersion('@openai/codex-sdk', entryPoint);
-    compatible = Boolean(version && semverSatisfies(version, CODEX_SDK_VERSION_RANGE));
-  } catch (error) {
-    logger.debug('[CodexDefaults] Could not read SDK metadata', { error });
-  }
-  codexSdkAvailabilityByEntryPoint.set(entryPoint, compatible);
-  return compatible;
+  return Boolean(resolveCodexSdkPackage());
 }
 
 export function hasCodexDefaultCredentials(env?: EnvOverrides): boolean {
@@ -429,6 +405,5 @@ export function clearCodexDefaultProvidersForTesting(): void {
   }
   codexDefaultProvidersByCacheKey.clear();
   evictedCodexDefaultProviderBundles.clear();
-  codexSdkAvailabilityByEntryPoint.clear();
   codexDefaultWorkingDir = undefined;
 }

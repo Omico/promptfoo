@@ -147,19 +147,20 @@ describe('Codex default providers', () => {
     expect(hasCodexDefaultCredentials()).toBe(false);
   });
 
-  it.each(['0.154.0', '0.157.0', 'invalid', null])(
-    'does not select an incompatible SDK (%s) for implicit grading',
+  it.each(['0.156.1', '0.166.0', '1.0.0', 'invalid', null])(
+    'selects an installed SDK regardless of version metadata (%s)',
     async (version) => {
       mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
       vi.mocked(getPackageVersion).mockReturnValue(version);
       const { hasCodexDefaultCredentials } = await import(
         '../../../src/providers/openai/codexDefaults'
       );
-      expect(hasCodexDefaultCredentials()).toBe(false);
+      expect(hasCodexDefaultCredentials()).toBe(true);
+      expect(getPackageVersion).not.toHaveBeenCalled();
     },
   );
 
-  it('treats unreadable SDK metadata as unavailable for implicit grading', async () => {
+  it('does not read SDK metadata when selecting implicit grading', async () => {
     mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
     vi.mocked(getPackageVersion).mockImplementation(() => {
       throw new SyntaxError('fixture metadata');
@@ -167,7 +168,8 @@ describe('Codex default providers', () => {
     const { hasCodexDefaultCredentials } = await import(
       '../../../src/providers/openai/codexDefaults'
     );
-    expect(hasCodexDefaultCredentials()).toBe(false);
+    expect(hasCodexDefaultCredentials()).toBe(true);
+    expect(getPackageVersion).not.toHaveBeenCalled();
   });
 
   it('checks the config-directory SDK that explicit provider calls would load', async () => {
@@ -184,11 +186,9 @@ describe('Codex default providers', () => {
       const { hasCodexDefaultCredentials } = await import(
         '../../../src/providers/openai/codexDefaults'
       );
-      expect(hasCodexDefaultCredentials()).toBe(false);
-      expect(getPackageVersion).toHaveBeenCalledWith(
-        '@openai/codex-sdk',
-        '/fixture/config/index.js',
-      );
+      expect(hasCodexDefaultCredentials()).toBe(true);
+      expect(getPackageVersion).not.toHaveBeenCalled();
+      expect(mockResolvePackageEntryPoint).toHaveBeenCalledWith('@openai/codex-sdk', codexHome);
       expect(mockResolvePackageEntryPoint).toHaveBeenCalledTimes(1);
     } finally {
       cliState.basePath = previousBasePath;

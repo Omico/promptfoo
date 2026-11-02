@@ -4,7 +4,6 @@ import path from 'path';
 
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
-import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
 import { getProcessEnv } from '../../envars';
 import {
@@ -26,7 +25,6 @@ import {
   isDefinitiveBillingCode,
   isHardQuotaCode,
 } from '../../util/fetch/errors';
-import { getPackageVersion } from '../../util/packageVersion';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { AgenticRunQueue, createAbortError } from '../agenticRunQueue';
@@ -597,8 +595,6 @@ function buildCodexRateLimitResponse(
   };
 }
 
-export const CODEX_SDK_VERSION_RANGE = '^0.156.1';
-
 export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
     cliState.basePath ? path.resolve(cliState.basePath) : undefined,
@@ -623,7 +619,7 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
       dedent`The @openai/codex-sdk package is required but not installed.
 
       To use the OpenAI Codex SDK provider, install it with:
-        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
+        npm install promptfoo @openai/codex-sdk
 
       Requires Node.js >=22.22.0.
 
@@ -631,18 +627,12 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
     );
   }
 
-  const version = getPackageVersion('@openai/codex-sdk', codexPath);
-  if (!version || !semverSatisfies(version, CODEX_SDK_VERSION_RANGE)) {
-    throw new Error(
-      `The OpenAI Codex SDK provider requires @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}`,
-    );
-  }
-
   try {
-    return {
-      entryPoint: codexPath,
-      module: await importModule(codexPath),
-    };
+    const sdk = await importModule(codexPath);
+    if (typeof sdk.Codex !== 'function') {
+      throw new Error('The SDK must export a Codex constructor');
+    }
+    return { entryPoint: codexPath, module: sdk };
   } catch (err) {
     logger.error(`Failed to load OpenAI Codex SDK: ${err}`);
     if ((err as any).stack) {
@@ -656,7 +646,7 @@ async function loadCodexSDK(): Promise<{ entryPoint: string; module: any }> {
       - Corrupted installation
 
       Try reinstalling:
-        npm install promptfoo @openai/codex-sdk@${CODEX_SDK_VERSION_RANGE}
+        npm install promptfoo @openai/codex-sdk
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -667,6 +657,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private cleanupGeneration = 0;
 
   static OPENAI_MODELS = [
+    'gpt-6.1-sol',
+    'gpt-6.1-terra',
     'gpt-6-astra',
     'gpt-6-sol',
     'gpt-6-luna',

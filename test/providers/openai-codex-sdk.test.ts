@@ -194,17 +194,27 @@ describe('OpenAICodexSDKProvider', () => {
     await clearCache();
   });
 
-  it.each(['0.144.0', '0.157.0', '1.0.0', 'invalid', null])(
-    'rejects incompatible SDK %s before importing it',
+  it.each(['0.156.1', '0.166.0', '1.0.0', 'invalid', null])(
+    'loads a usable SDK regardless of version metadata (%s)',
     async (version) => {
       vi.mocked(getPackageVersion).mockReturnValue(version);
+      mockRun.mockResolvedValue(createMockResponse('SDK loaded'));
       const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
       const response = await provider.callApi('test');
-      expect(response.error).toContain('requires @openai/codex-sdk@^0.156.1');
-      expect(response.error).toContain('npm install promptfoo @openai/codex-sdk@^0.156.1');
-      expect(importModule).not.toHaveBeenCalled();
+      expect(response.output).toBe('SDK loaded');
+      expect(response.error).toBeUndefined();
+      expect(importModule).toHaveBeenCalledWith('@openai/codex-sdk');
+      expect(getPackageVersion).not.toHaveBeenCalled();
     },
   );
+
+  it('rejects modules without a Codex constructor before starting a turn', async () => {
+    mockImportModule.mockResolvedValue({});
+    const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
+    const response = await provider.callApi('test');
+    expect(response.error).toContain('Failed to load @openai/codex-sdk');
+    expect(mockStartThread).not.toHaveBeenCalled();
+  });
 
   it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
     const provider = new OpenAICodexSDKProvider({ config: {} });
