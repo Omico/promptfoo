@@ -1213,7 +1213,7 @@ export function createServerOpenApiRegistry() {
   return { registry, routes };
 }
 
-export function createServerOpenApiDocument() {
+export function createServerOpenApiDocument(): ReturnType<OpenApiGeneratorV31['generateDocument']> {
   const { registry } = createServerOpenApiRegistry();
   const generator = new OpenApiGeneratorV31(registry.definitions, {
     sortComponents: 'alphabetically',
