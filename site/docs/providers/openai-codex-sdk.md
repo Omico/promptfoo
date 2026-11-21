@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.169.x. For GPT-6.2 Astra and Sol, install SDK 0.169.1 or later in this range. Its bundled CLI includes both models in the [Codex model catalog](https://github.com/openai/codex/blob/rust-v0.169.1/codex-rs/models-manager/models.json). Model access depends on your account.
+Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.169.x and SDK 0.171.0. For GPT-6.2 Astra and Sol, install SDK 0.169.1 or 0.171.0. Both bundled CLI versions include these models in the [Codex model catalog](https://github.com/openai/codex/blob/rust-v0.171.0/codex-rs/models-manager/models.json). Model access depends on your account.
 
 ```bash
-npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.170.0"
+npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.170.0 || 0.171.0"
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.

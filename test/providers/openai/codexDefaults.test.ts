@@ -118,7 +118,7 @@ describe('Codex default providers', () => {
     expect(hasCodexDefaultCredentials()).toBe(true);
   });
 
-  it.each(['0.165.0', '0.166.0', '0.169.1'])(
+  it.each(['0.165.0', '0.166.0', '0.169.1', '0.171.0'])(
     'selects SDK %s for implicit grading when signed in',
     async (version) => {
       vi.mocked(getPackageVersion).mockReturnValue(version);

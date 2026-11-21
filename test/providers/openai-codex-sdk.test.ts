@@ -203,9 +203,9 @@ describe('OpenAICodexSDKProvider', () => {
       vi.mocked(getPackageVersion).mockReturnValue(version);
       const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
       const response = await provider.callApi('test');
-      expect(response.error).toContain('requires @openai/codex-sdk@>=0.156.1 <0.170.0');
+      expect(response.error).toContain('requires @openai/codex-sdk@>=0.156.1 <0.170.0 || 0.171.0');
       expect(response.error).toContain(
-        'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.170.0"',
+        'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.170.0 || 0.171.0"',
       );
       expect(importModule).not.toHaveBeenCalled();
     },

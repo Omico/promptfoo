@@ -598,7 +598,7 @@ function buildCodexRateLimitResponse(
   };
 }
 
-export const CODEX_SDK_VERSION_RANGE = '>=0.156.1 <0.170.0';
+export const CODEX_SDK_VERSION_RANGE = '>=0.156.1 <0.170.0 || 0.171.0';
 
 export function resolveCodexSdkPackage(): string | null {
   const basePaths = [
