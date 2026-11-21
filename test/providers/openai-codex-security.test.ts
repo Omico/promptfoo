@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -690,6 +691,30 @@ describe('OpenAICodexSecurityProvider', () => {
           knowledgeBasePaths: [path.resolve(configDirectory, 'knowledge.md')],
         }),
       );
+    });
+
+    it('accepts a new output directory when agentic working-directory checks are enabled', async () => {
+      const root = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), 'promptfoo-paths-')));
+      const repository = path.join(root, 'repository');
+      const excluded = path.join(root, 'excluded');
+      try {
+        await Promise.all([fs.mkdir(repository), fs.mkdir(excluded)]);
+        vi.stubEnv('PROMPTFOO_AGENTIC_EXCLUDED_DIRECTORY', excluded);
+        const provider = new OpenAICodexSecurityProvider({
+          config: { basePath: root, repository: './repository', output_dir: './new-output' },
+        });
+
+        const result = await provider.callApi('Synthetic path fixture');
+
+        expect(result.error).toBeUndefined();
+        expect(mockRun).toHaveBeenCalledWith(
+          repository,
+          expect.objectContaining({ outputDir: path.join(root, 'new-output') }),
+        );
+      } finally {
+        vi.unstubAllEnvs();
+        await fs.rm(root, { recursive: true, force: true });
+      }
     });
 
     it('captures observed cost, progress, and warnings when the result has no cost', async () => {

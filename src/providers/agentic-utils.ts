@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 /**
  * Shared utilities for agentic providers (Claude Agent SDK, OpenCode SDK, etc.)
  *
@@ -67,6 +68,26 @@ export function isAgenticGradingProvider(provider: ApiProvider | null | undefine
 const FINGERPRINT_TIMEOUT_MS = 2000;
 const STAT_BATCH_SIZE = 32;
 
+function checkAgenticWorkingDirectory(directory?: string): string | undefined {
+  const excluded = process.env.PROMPTFOO_AGENTIC_EXCLUDED_DIRECTORY;
+  if (!excluded) {
+    return directory;
+  }
+
+  const excludedPath = realpathSync.native(excluded);
+  const workspace = realpathSync.native(directory ?? process.cwd());
+  const contains = (parent: string, child: string) => {
+    const relative = path.relative(parent, child);
+    return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+  };
+
+  if (contains(excludedPath, workspace) || contains(workspace, excludedPath)) {
+    throw new Error(`Agentic working directory overlaps the excluded directory: ${workspace}`);
+  }
+
+  return directory === undefined ? undefined : workspace;
+}
+
 /**
  * Resolve a coding-agent working directory relative to the config file directory.
  *
@@ -78,11 +99,10 @@ export function resolveAgenticWorkingDir(
   workingDir: string | undefined,
   configBasePath?: string,
 ): string | undefined {
-  if (!workingDir) {
-    return undefined;
-  }
-
-  return safeResolve(configBasePath ? path.resolve(configBasePath) : process.cwd(), workingDir);
+  const directory = workingDir
+    ? safeResolve(configBasePath ? path.resolve(configBasePath) : process.cwd(), workingDir)
+    : undefined;
+  return checkAgenticWorkingDirectory(directory);
 }
 
 /**

@@ -4,6 +4,7 @@ import path from 'path';
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
 import { z } from 'zod';
+import { safeResolve } from '../../util/pathUtils';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import {
@@ -240,7 +241,8 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
 }
 
 function resolveConfigPath(value: string | undefined, configBasePath?: string): string | undefined {
-  return resolveAgenticWorkingDir(value, configBasePath ?? cliState.basePath);
+  const basePath = configBasePath ?? cliState.basePath;
+  return value ? safeResolve(basePath ? path.resolve(basePath) : process.cwd(), value) : undefined;
 }
 
 function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage | undefined {
@@ -354,7 +356,9 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         config.repository ??
         config.working_dir ??
         (typeof repositoryVariable === 'string' ? repositoryVariable : undefined);
-      const repository = resolveConfigPath(configuredRepository, config.basePath) ?? process.cwd();
+      const repository =
+        resolveAgenticWorkingDir(configuredRepository, config.basePath ?? cliState.basePath) ??
+        process.cwd();
 
       if (callOptions?.abortSignal?.aborted) {
         return { error: 'Codex Security operation was aborted before it started.' };
