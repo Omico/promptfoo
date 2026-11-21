@@ -63,6 +63,13 @@ export interface DecodedStatus {
   message?: string;
 }
 
+interface DecodedSpanEvent {
+  timeUnixNano: Long | number;
+  name: string;
+  attributes?: DecodedAttribute[];
+  droppedAttributesCount?: number;
+}
+
 /**
  * Decoded OTLP span
  */
@@ -76,7 +83,7 @@ export interface DecodedSpan {
   endTimeUnixNano?: Long | number;
   attributes?: DecodedAttribute[];
   status?: DecodedStatus;
-  events?: any[];
+  events?: DecodedSpanEvent[];
   links?: any[];
   droppedAttributesCount?: number;
   droppedEventsCount?: number;

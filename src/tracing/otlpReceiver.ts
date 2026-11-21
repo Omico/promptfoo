@@ -30,6 +30,11 @@ interface OTLPAttribute {
   };
 }
 
+interface OTLPSpanEvent {
+  name: string;
+  attributes?: OTLPAttribute[];
+}
+
 interface OTLPSpan {
   traceId: string; // Base64 encoded
   spanId: string; // Base64 encoded
@@ -39,10 +44,62 @@ interface OTLPSpan {
   startTimeUnixNano: string;
   endTimeUnixNano?: string;
   attributes?: OTLPAttribute[];
+  events?: OTLPSpanEvent[];
+  droppedEventsCount?: number | string;
   status?: {
     code: number;
     message?: string;
   };
+}
+
+const DROPPED_EVENTS_COUNT = 'otel.dropped_events_count';
+const TOOL_RESULT_OBSERVED = 'codex.tool_result_observed';
+const SPAN_EVENT_ATTRIBUTE_KEYS = new Set([DROPPED_EVENTS_COUNT, TOOL_RESULT_OBSERVED]);
+
+function parseDroppedEventCount(count: unknown): number | undefined {
+  if (typeof count === 'string') {
+    const decimal = /^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(count);
+    if (!decimal) {
+      return undefined;
+    }
+    const [, whole, fraction = '', exponent = '0'] = decimal;
+    const fractionalPlaces = fraction.length - Number(exponent);
+    // Check the quoted value before conversion can round off a nonzero fraction.
+    if (fractionalPlaces > 0 && /[1-9]/.test((whole + fraction).slice(-fractionalPlaces))) {
+      return undefined;
+    }
+    count = Number(count);
+  }
+  return typeof count === 'number' && Number.isInteger(count) && count > 0 && count <= 0xffff_ffff
+    ? count
+    : undefined;
+}
+
+function spanEventAttributes(
+  events: OTLPSpan['events'] | DecodedSpan['events'],
+  droppedEventsCount: number | string | undefined,
+): Record<string, boolean | number> {
+  const attributes: Record<string, boolean | number> = {};
+  const count = parseDroppedEventCount(droppedEventsCount);
+  if (count !== undefined) {
+    attributes[DROPPED_EVENTS_COUNT] = count;
+  }
+  if (
+    Array.isArray(events) &&
+    events.some(
+      (event) =>
+        event?.name === 'codex.tool_result' ||
+        (Array.isArray(event?.attributes) &&
+          event.attributes.some(
+            (attribute) =>
+              attribute?.key === 'event.name' &&
+              attribute.value?.stringValue === 'codex.tool_result',
+          )),
+    )
+  ) {
+    attributes[TOOL_RESULT_OBSERVED] = true;
+  }
+  return attributes;
 }
 
 interface OTLPScopeSpan {
@@ -484,6 +541,8 @@ export class OTLPReceiver {
     // parented to the span it was emitted from, so SDK-internal events show up
     // in the Traces tab alongside provider and tool spans.
     this.app.post('/v1/logs', async (req, res) => {
+      // Avoid losing exporter batches when an idle connection closes during reuse.
+      res.setHeader('Connection', 'close');
       logger.debug('[OtlpReceiver] Received logs request');
       try {
         const traces = this.parseOTLPLogsJSONRequest(req.body as OTLPLogsRequest);
@@ -540,7 +599,6 @@ export class OTLPReceiver {
   private async parseIncomingRequest(format: OTLPFormat, body: unknown): Promise<ParsedTrace[]> {
     if (format === 'json') {
       logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
-      logger.debug(`[OtlpReceiver] Request body: ${JSON.stringify(body).substring(0, 500)}...`);
       return this.parseOTLPJSONRequest(body as OTLPTraceRequest);
     }
 
@@ -691,6 +749,7 @@ export class OTLPReceiver {
           const attributes: Record<string, any> = {
             ...resourceAttributes,
             ...this.parseAttributes(span.attributes),
+            ...spanEventAttributes(span.events, span.droppedEventsCount),
             'otel.scope.name': scopeSpan.scope?.name,
             'otel.scope.version': scopeSpan.scope?.version,
             'otel.span.kind': spanKindName,
@@ -880,6 +939,7 @@ export class OTLPReceiver {
         attributes: {
           ...resourceAttributes,
           ...this.parseDecodedAttributes(span.attributes),
+          ...spanEventAttributes(span.events, span.droppedEventsCount),
           'otel.scope.name': scopeSpan.scope?.name,
           'otel.scope.version': scopeSpan.scope?.version,
           'otel.span.kind': spanKindName,
@@ -899,6 +959,9 @@ export class OTLPReceiver {
     const result: Record<string, any> = {};
 
     for (const attr of attributes) {
+      if (SPAN_EVENT_ATTRIBUTE_KEYS.has(attr.key)) {
+        continue;
+      }
       const value = this.parseDecodedAttributeValue(attr.value);
       if (value !== undefined) {
         result[attr.key] = value;
@@ -949,6 +1012,10 @@ export class OTLPReceiver {
     const result: Record<string, any> = {};
 
     for (const attr of attributes) {
+      // These keys are derived from span events, including on the logs ingestion path.
+      if (SPAN_EVENT_ATTRIBUTE_KEYS.has(attr.key)) {
+        continue;
+      }
       const value = this.parseAttributeValue(attr.value);
       if (value !== undefined) {
         result[attr.key] = value;
