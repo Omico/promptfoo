@@ -5,7 +5,7 @@ import { callApi } from '@app/utils/api';
 import { getUnifiedConfig } from '@promptfoo/presentation/redteamConfig';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { load as loadYaml } from 'js-yaml';
+import { dump as dumpYaml, load as loadYaml } from 'js-yaml';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { getEstimatedDuration, getEstimatedProbes } from './components/strategies/utils';
@@ -354,7 +354,10 @@ describe('RedTeamSetupPage', () => {
       });
     });
 
-    it('normalizes an object target with an omitted config while importing YAML', async () => {
+    it.each([
+      { id: 'openai:gpt-5', label: 'customer-service-agent' },
+      'openai:codex-sdk:gpt-6-sol',
+    ])('preserves the provider and supplies an empty config when importing %j', async (target) => {
       const user = userEvent.setup();
       const showToast = vi.fn();
       mockedUseToast.mockReturnValue({ showToast });
@@ -365,20 +368,15 @@ describe('RedTeamSetupPage', () => {
         </MemoryRouter>,
       );
       await user.click(screen.getByRole('button', { name: /Load Config/i }));
-      const file = new File(
-        [
-          'description: Valid shorthand target\ntargets:\n  - id: openai:gpt-5\n    label: customer-service-agent\nredteam:\n  plugins: [default]\n',
-        ],
-        'config.yaml',
-        { type: 'text/yaml' },
-      );
+      const file = new File([dumpYaml({ targets: [target] })], 'config.yaml', {
+        type: 'text/yaml',
+      });
 
       await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
 
       await waitFor(() => {
         expect(useRedTeamConfig.getState().config.target).toEqual({
-          id: 'openai:gpt-5',
-          label: 'customer-service-agent',
+          ...(typeof target === 'string' ? { id: target, label: target } : target),
           config: {},
         });
         expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
@@ -786,7 +784,7 @@ redteam:
 
     it.each([
       ['openai:responses:gpt-6.2-astra', 'openai'],
-      ['openai:codex-sdk:gpt-6.2-sol', 'openai'],
+      ['openai:codex-sdk:gpt-6.2-sol', 'codex-sdk'],
       ['litellm:openai/gpt-6.2-sol', 'litellm'],
       ['openrouter:openai/gpt-6.2-astra', 'openrouter'],
       ['vercel:openai/gpt-6.2-sol', 'vercel'],
